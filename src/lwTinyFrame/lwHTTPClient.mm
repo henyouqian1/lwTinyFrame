@@ -3,8 +3,50 @@
 #include "lwUtil.h"
 #include <sstream>
 
-namespace lw{
+@interface HTTPCallback : NSObject {
+    lw::HTTPMsg *pMsg;
+}
+@end
 
+@implementation HTTPCallback
+- (id)initWithMsg:(lw::HTTPMsg*)p
+{
+    if ( self =[super init] ){
+        pMsg=p;
+        pMsg->_pObjCCallback=self;
+    }
+    return self;
+}
+- (void)connection:(NSURLConnection *)connection didReceiveResponse:(NSURLResponse *)response
+{
+    pMsg->getBuff()->reset();
+}
+
+- (void)connection:(NSURLConnection *)connection didReceiveData:(NSData *)data
+{
+    pMsg->getBuff()->write((char*)([data bytes]), [data length]);
+}
+
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection
+{
+    pMsg->getBuff()->writeChar(0);
+    pMsg->getClient()->addToRespond(pMsg);
+    [connection release];
+}
+- (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
+{
+    pMsg->getClient()->deleteMsg(pMsg);
+    lwerror("http error");
+}
+
+- (void)dealloc
+{
+    [super dealloc];
+}
+
+@end
+
+namespace lw{
 	void HttpMsgBuf::write(const char* p, int size){
 		if ( _size + size > _buffSize ){
 			while ( _buffSize < _size + size ){
@@ -109,87 +151,16 @@ namespace lw{
 		_pRead += dataSize;
 	}
 	
-	void* CFClientRetain(void* selfPtr){
-		HTTPMsg* object	= (HTTPMsg *) selfPtr;
-		return object;
-	}
-
-	void CFClientRelease(void* selfPtr){
-		
-	}
-	
-	CFStringRef CFClientDescribeCopy(void* selfPtr){
-		return NULL;
-	}
-	
-	static CFStreamClientContext sContext = {
-		0, nil,
-		NULL,
-		NULL,
-		NULL
-	};
-	
-	void HTTPReadCallback(CFReadStreamRef stream, CFStreamEventType type, void* userData){
-		HTTPMsg* pMsg = (HTTPMsg*) userData;
-		switch (type) {
-			case kCFStreamEventHasBytesAvailable: {
-				UInt8 buf[HTTPMsg::BUFF_SIZE];
-				CFIndex bytesRead = CFReadStreamRead(stream, buf, HTTPMsg::BUFF_SIZE);
-					if (bytesRead > 0) {
-						pMsg->getBuff()->write((char*)(buf), bytesRead);
-					}
-				}
-				break;
-			case kCFStreamEventErrorOccurred:
-				pMsg->getClient()->deleteMsg(pMsg);
-				lwerror("kCFStreamEventEndEncountered");
-				break;
-			case kCFStreamEventEndEncountered:
-				pMsg->getClient()->addToRespond(pMsg);
-				break;
-			default:
-				break;
-		}
-	}
-
-
 	HTTPMsg::HTTPMsg(const wchar_t* objName, HTTPClient* pClient)
-	:_pClient(pClient), _buff(BUFF_SIZE), _readStream(NULL){
+	:_pClient(pClient), _buff(BUFF_SIZE){
 		lwassert(objName);
 		_objName = objName;
-		_cfContext = sContext;
-		_cfContext.info = this;
-	}
+    }
 
 	HTTPMsg::~HTTPMsg(){
-		if (_readStream) {
-			//   Close the read stream.
-			CFReadStreamClose(_readStream);
-			//   Deregister the callback client (learned this from WWDC session 805)
-			CFReadStreamSetClient(_readStream, 0, NULL, NULL);
-			//   Take the stream out of the run loop
-			CFReadStreamUnscheduleFromRunLoop(
-											  _readStream,
-											  CFRunLoopGetCurrent(),
-											  kCFRunLoopCommonModes);
-			//   Deallocate the stream pointer
-			CFRelease(_readStream);
-			//   Throw the spent pointer away
-			_readStream = NULL;
-		}
+		[(HTTPCallback*)_pObjCCallback release];
 	}
 
-	void HTTPMsg::onSendComplete(){
-		
-	}
-
-	void HTTPMsg::onHeadersAvailable(){
-		
-	}
-
-	void HTTPMsg::onReadComplete(int bytesRead){
-		
-	}
 	void HTTPMsg::send(){
 		_pClient->sendMsg(this);
 	}
@@ -203,7 +174,7 @@ namespace lw{
 	HTTPClient::HTTPClient(const wchar_t* serverName, unsigned short port)
 	{
 		std::wstringstream ss;
-		ss << L"http://" << serverName << ":" << port << L"/";
+		ss << serverName << ":" << port << L"/";
 		W2UTF8 str8(ss.str().c_str());
 		_strUrl = str8.data();
 	}
@@ -223,51 +194,26 @@ namespace lw{
 	}
 
 	void HTTPClient::sendMsg(HTTPMsg* pMsg){
-		std::stringstream ss;
+        std::stringstream ss;
 		W2UTF8 objName(pMsg->getObjName());
 		ss << _strUrl.c_str() << objName.data();
-		//CFStringRef url = CFSTR(ss.str().c_str());
-		CFStringRef url = CFStringCreateWithCString(kCFAllocatorDefault, ss.str().c_str(), kCFStringEncodingASCII);
-		//CFStringRef url = CFSTR("http://localhost:8080/lwDownload");
-		CFURLRef myURL = CFURLCreateWithString(kCFAllocatorDefault, url, NULL);
-		CFStringRef requestMethod = CFSTR("POST");
-		CFHTTPMessageRef myRequest = CFHTTPMessageCreateRequest(kCFAllocatorDefault, requestMethod, myURL, kCFHTTPVersion1_1);
-		
-		CFDataRef bodyData = CFDataCreate(kCFAllocatorDefault, (UInt8*)(pMsg->getBuff()->getBuff()), pMsg->getBuff()->getSize());
-		pMsg->getBuff()->reset();
-		CFHTTPMessageSetBody(myRequest, bodyData);
-		
-		CFReadStreamRef readStream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, myRequest);
-		
-		pMsg->setReadStream(readStream);
-		
-		CFRelease(url);
-		CFRelease(myURL);
-		CFRelease(myRequest);
-		CFRelease(bodyData);
-		
-		bool bResults = CFReadStreamSetClient(readStream,
-												kCFStreamEventHasBytesAvailable |
-												kCFStreamEventErrorOccurred |
-												kCFStreamEventEndEncountered,
-												HTTPReadCallback,
-												pMsg->getContext());
-		if ( bResults ){
-			CFReadStreamScheduleWithRunLoop(readStream, CFRunLoopGetCurrent(), kCFRunLoopCommonModes);
-			bResults = CFReadStreamOpen(readStream);
-			if ( !bResults ){
-				lwerror("CFReadStreamOpen failed");
-			}
-			
-		}else{
-			lwerror("CFReadStreamSetClient failed");
-		}
-	
-		if ( bResults ){
-			_msgs.push_back(pMsg);
-		}else{
-			delete pMsg;
-		}
+        NSString* urlString=[[NSString alloc] initWithUTF8String:ss.str().c_str()];
+        NSURL* url=[[NSURL alloc] initWithString:urlString];
+        NSURLRequest *theRequest=[NSURLRequest requestWithURL:url
+                                                  cachePolicy:NSURLRequestUseProtocolCachePolicy
+                                              timeoutInterval:60.0];
+        // create the connection with the request
+        // and start loading the data
+        HTTPCallback* pCallback = [[HTTPCallback alloc] initWithMsg:pMsg];
+        NSURLConnection *theConnection=[[NSURLConnection alloc] initWithRequest:theRequest delegate:pCallback];
+        if (theConnection) {
+            pMsg->getBuff()->reset();
+            _msgs.push_back(pMsg);
+        } else {
+            delete pMsg;
+        }
+        [urlString release];
+        [url release];
 	}
 
 	void HTTPClient::deleteMsg(HTTPMsg* pMsg){

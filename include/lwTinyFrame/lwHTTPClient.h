@@ -76,24 +76,16 @@ namespace lw{
 		char* getRecvBuff(){
 			return _recvBuffTemp;
 		}
+        void onSendComplete();
+		void onHeadersAvailable();
+		void onReadComplete(int bytesRead);
 #endif
 #ifdef __APPLE__
-		CFStreamClientContext* getContext(){
-			return &_cfContext;
-		}
-		UInt8* getRecvBuff(){
-			return _recvBuffTemp;
-		}
-		void setReadStream(CFReadStreamRef rsr){
-			_readStream = rsr;
-		}
+        void* _pObjCCallback;
 #endif
 		virtual void onRespond(){}
 
-		void onSendComplete();
-		void onHeadersAvailable();
-		void onReadComplete(int bytesRead);
-
+		
 		HttpMsgBuf* getBuff(){
 			return &_buff;
 		}
@@ -115,11 +107,6 @@ namespace lw{
 #ifdef WIN32
 		HINTERNET _hRequest;
 		char _recvBuffTemp[BUFF_SIZE];
-#endif
-#ifdef __APPLE__
-		CFStreamClientContext _cfContext;
-		UInt8 _recvBuffTemp[BUFF_SIZE];
-		CFReadStreamRef _readStream;
 #endif
 
 	friend class HTTPClient;

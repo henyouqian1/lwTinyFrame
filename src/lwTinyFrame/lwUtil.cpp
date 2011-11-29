@@ -71,7 +71,7 @@ W2UTF8::~W2UTF8(){
 int W2UTF8::size(){
 	return _size;
 }
-char* W2UTF8::data(){
+const char* W2UTF8::data(){
 	return _buffer;
 }
 
@@ -91,7 +91,7 @@ UTF82W::~UTF82W(){
 int UTF82W::size(){
 	return _size;
 }
-wchar_t* UTF82W::data(){
+const wchar_t* UTF82W::data(){
 	return _buffer;
 }
 

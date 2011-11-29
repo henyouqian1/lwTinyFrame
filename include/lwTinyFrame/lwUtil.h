@@ -13,7 +13,7 @@ public:
 	W2UTF8(const wchar_t* w);
 	~W2UTF8();
 	int size();
-	char* data();
+	const char* data();
 	operator const char*();
 
 private:
@@ -27,7 +27,7 @@ public:
 	UTF82W(const char* c);
 	~UTF82W();
 	int size();
-	wchar_t* data();
+	const wchar_t* data();
 	operator const wchar_t*();
 
 private:
