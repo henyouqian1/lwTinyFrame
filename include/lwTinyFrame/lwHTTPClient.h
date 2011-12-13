@@ -61,13 +61,14 @@ namespace lw{
 	class HTTPClient;
 	class HTTPMsg{
 	public:
-		HTTPMsg(const wchar_t* objName, lw::HTTPClient* pClient);
+		HTTPMsg(const wchar_t* objName, lw::HTTPClient* pClient, bool useHTTPS = false);
 		const wchar_t* getObjName(){
 			return _objName.c_str();
 		}
 		HTTPClient* getClient(){
 			return _pClient;
 		}
+        void addParam(const wchar_t* param);
 		void send();
 #ifdef WIN32
 		void setHRequest(HINTERNET h){
@@ -99,10 +100,9 @@ namespace lw{
 
 	protected:
 		HttpMsgBuf _buff;
-		
-		
 		std::wstring _objName;
 		HTTPClient* _pClient;
+        bool _useHTTPS;
 
 #ifdef WIN32
 		HINTERNET _hRequest;
@@ -114,11 +114,10 @@ namespace lw{
 
 	class HTTPClient{
 	public:
-        HTTPClient(const wchar_t* addr);
-		HTTPClient(const wchar_t* serverName, unsigned short port);
+        HTTPClient(const wchar_t* host);
 		~HTTPClient();
 		bool connect();
-		void sendMsg(HTTPMsg* pMsg);
+		void sendMsg(HTTPMsg* pMsg, bool useHTTPS);
 		void deleteMsg(HTTPMsg* pMsg);
 		void addToRespond(HTTPMsg* pMsg);
 		void main();
@@ -132,15 +131,16 @@ namespace lw{
 		bool _isConnected;
 #endif
 #ifdef __APPLE__
-		std::string _strUrl;
+		std::string _strHost;
 #endif
 		std::vector<HTTPMsg*> _msgs;
 		std::vector<HTTPMsg*> _respondMsgs;
 	};
 
+/*
 	class HTTPClientTask : public lw::Task{
 	public:
-		HTTPClientTask(const wchar_t* URL, unsigned short port);
+		HTTPClientTask(const wchar_t* host);
 		~HTTPClientTask();
 		virtual void vBegin();
 		virtual void vEnd();
@@ -151,10 +151,10 @@ namespace lw{
 
 	private:
 		lw::HTTPClient* _pHTTPClient;
-		std::wstring _URL;
-		unsigned short _port;
-	};
-
+		std::wstring _strHost;
+    };
+*/
+    
 } //namespace lw
 
 #endif //__LW_HTTP_CLIENT_H__

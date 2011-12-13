@@ -36,7 +36,7 @@
 - (void)connection:(NSURLConnection *)connection didFailWithError:(NSError *)error
 {
     pMsg->getClient()->deleteMsg(pMsg);
-    lwerror("http error");
+    lwerror("http error:" << [[error localizedDescription]UTF8String] << " from: " << W2UTF8(pMsg->getObjName()));
 }
 
 - (void)dealloc
@@ -151,8 +151,8 @@ namespace lw{
 		_pRead += dataSize;
 	}
 	
-	HTTPMsg::HTTPMsg(const wchar_t* objName, HTTPClient* pClient)
-	:_pClient(pClient), _buff(BUFF_SIZE){
+	HTTPMsg::HTTPMsg(const wchar_t* objName, HTTPClient* pClient, bool useHTTPS)
+	:_pClient(pClient), _buff(BUFF_SIZE), _useHTTPS(useHTTPS){
 		lwassert(objName);
 		_objName = objName;
     }
@@ -162,21 +162,17 @@ namespace lw{
 	}
 
 	void HTTPMsg::send(){
-		_pClient->sendMsg(this);
+		_pClient->sendMsg(this, _useHTTPS);
 	}
     
-    HTTPClient::HTTPClient(const wchar_t* addr)
+    void HTTPMsg::addParam(const wchar_t* param){
+        _objName.append(param);
+    }
+    
+    HTTPClient::HTTPClient(const wchar_t* host)
 	{
-        W2UTF8 str8(addr);
-		_strUrl = str8.data();
-	}
-
-	HTTPClient::HTTPClient(const wchar_t* serverName, unsigned short port)
-	{
-		std::wstringstream ss;
-		ss << serverName << ":" << port << L"/";
-		W2UTF8 str8(ss.str().c_str());
-		_strUrl = str8.data();
+        W2UTF8 str8(host);
+		_strHost = str8.data();
 	}
 
 	HTTPClient::~HTTPClient(){
@@ -193,12 +189,16 @@ namespace lw{
 		return false;
 	}
 
-	void HTTPClient::sendMsg(HTTPMsg* pMsg){
+	void HTTPClient::sendMsg(HTTPMsg* pMsg, bool useHTTPS){
         std::stringstream ss;
 		W2UTF8 objName(pMsg->getObjName());
-		ss << _strUrl.c_str() << objName.data();
+        if ( useHTTPS ){
+            ss << "https://" << _strHost.c_str() << objName.data();
+        }else{
+            ss << "http://" << _strHost.c_str() << objName.data();
+        }
         NSString* urlString=[[NSString alloc] initWithUTF8String:ss.str().c_str()];
-        NSURL* url=[[NSURL alloc] initWithString:urlString];
+        NSURL* url=[[NSURL alloc] initWithString:[urlString stringByAddingPercentEscapesUsingEncoding:NSUTF8StringEncoding]];
         NSURLRequest *theRequest=[NSURLRequest requestWithURL:url
                                                   cachePolicy:NSURLRequestUseProtocolCachePolicy
                                               timeoutInterval:60.0];
@@ -244,8 +244,9 @@ namespace lw{
 		_respondMsgs.clear();
 	}
 	
-	HTTPClientTask::HTTPClientTask(const wchar_t* URL, unsigned short port)
-	:_URL(URL), _port(port){
+/*
+	HTTPClientTask::HTTPClientTask(const wchar_t* host)
+	:_strHost(host){
 		
 	}
 
@@ -254,7 +255,7 @@ namespace lw{
 	}
 
 	void HTTPClientTask::vBegin(){
-		_pHTTPClient = new lw::HTTPClient(_URL.c_str(), _port);
+		_pHTTPClient = new lw::HTTPClient(_strHost.c_str());
 	}
 
 	void HTTPClientTask::vEnd(){
@@ -264,5 +265,6 @@ namespace lw{
 	void HTTPClientTask::vMain(float dt){
 		_pHTTPClient->main();
 	}
+*/
 	
 } //namespace lw
